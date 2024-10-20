@@ -58,7 +58,7 @@ class ReplayBuffer:
 
 # SAC Agent
 class SACAgent:
-    def __init__(self, state_dim, action_dim, hidden_dim=512, gamma=0.99, tau=0.5, alpha=0.5, buffer_size=100000, batch_size=64, lr=3e-4):
+    def __init__(self, state_dim, action_dim, hidden_dim=512, gamma=0.99, tau=0.005, alpha=0.2, buffer_size=1000000, batch_size=256, lr=3e-4):
         self.actor = Actor(state_dim, action_dim, hidden_dim).cuda()
         self.critic1 = Critic(state_dim, action_dim, hidden_dim).cuda()
         self.critic2 = Critic(state_dim, action_dim, hidden_dim).cuda()

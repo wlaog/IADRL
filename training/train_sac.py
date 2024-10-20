@@ -9,13 +9,14 @@ import time
 import gymnasium as gym
 import matplotlib.pyplot as plt
 from agents.sac_agent import SACAgent
+from agents.ddpg_agent import DDPGAgent
 import env  # 确保导入 env 模块以便注册环境
 
 if __name__ == "__main__":
     # 训练参数：
     # np.seterr(over='warn')  # 或 over='raise' 以抛出异常
 
-    num_episodes=200
+    num_episodes=150
     max_steps=1000
     render=False
     env = gym.make("BRC-v0")
@@ -23,17 +24,24 @@ if __name__ == "__main__":
     start_time = time.time() 
     state_dim = env.observation_space.shape[0]
     action_dim = env.action_space.shape[0]
-    agent = SACAgent(state_dim, action_dim)
+    # agent = SACAgent(state_dim, action_dim)
+    agent = DDPGAgent(state_dim, action_dim)
+
+
     rewards = []
 
     for episode in range(num_episodes):
         state, info = env.reset()
         episode_reward = 0
+        envdam = 0
 
         for t in range(max_steps):
 
             action = agent.select_action(state)
             next_state, reward, done, truncated,_ = env.step(action)
+            if episode_reward >=40:
+                envdam = 1
+                break
             agent.store_transition(state, action, reward, next_state, done)
             agent.update()
 
@@ -46,8 +54,9 @@ if __name__ == "__main__":
         if render:
             env.render()
 
-        rewards.append(episode_reward)
-        print(f"Episode {episode + 1}, Reward: {episode_reward}")
+        if envdam == 0:
+            rewards.append(min(1000,episode_reward))
+            print(f"Episode {episode + 1}, Reward: {episode_reward}")
 
     env.close()
 

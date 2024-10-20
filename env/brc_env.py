@@ -74,43 +74,46 @@ class BRCEnv(gym.Env):
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
-        
+
         # 重置状态、奖励和终止标志
         # 按照无偏的逻辑加载参数组合Parameters--------------------
-        file_path = 'env\Parameters_Generator\para_all.csv'
+        file_path = 'env\\Parameters_Generator\\para_all.csv'
         data = pd.read_csv(file_path)
         # 将 DataFrame 转换为 NumPy 数组
         data_array = myData(data.to_numpy())
-        # # 显示导入的数据
-        # print(data)
         # 初始化生成器
         generator = GMMGenerator(n_components=12, covariance_type='diag')
-        # 拟合 GMM 到样本数据
         generator.fit(data_array.data_scaled)
         generated_samples_scaled = generator.generate_samples()
         self.Para = data_array.scaler.inverse_transform(generated_samples_scaled)
         self.Para = self.Para.flatten().tolist()
-        # 按照无偏的逻辑加载参数组合Parameters--------------------
+
+        # 初始化状态
         self.init_state = self.state_rand()
         self.pedmodel = DriverPedestrianModel(self.Para, self.init_state, self.dt, self.pdecrdt)
-        self.state = np.concatenate((self.pedmodel.car_state[-2], self.pedmodel.ped_state[-2])) # 注意state-1车的加速度是借用了-2的，因此-2才是对齐的
+        self.state = np.concatenate((self.pedmodel.car_state[-2], self.pedmodel.ped_state[-2]))
         self.reward = 0.0
         self.terminated = False
         self.truncated = False
+
         # 初始化意图值
         self.reward0 = self.belief_cal(self.state)
 
-        # 记录待绘图的数组
-        self.x = []
-        self.y = []
-        self.x.append( self.pedmodel.car_state[-1][0])  # 初始车辆位置
-        self.y.append( self.pedmodel.ped_state[-1][0]) # 初始行人位置
+        # 记录车辆和行人位置
+        self.x = [self.pedmodel.car_state[-1][0]]  # 初始车辆位置
+        self.y = [self.pedmodel.ped_state[-1][0]]  # 初始行人位置
+
         # 记录时序状态
         self.state_Q = Queue(6*3*5)
         self.state_Q.update(self.state)
 
-        # return self.state, {}
-        return self.state_Q.state, {}
+        # 将状态转换为 float32 类型
+        obs = self.state_Q.state.astype(np.float32)
+
+        # 确保状态在 observation_space 内
+        assert self.observation_space.contains(obs), f"状态 {obs} 不在定义的状态空间内"
+
+        return obs, {}
 
     def vehicle_limit(self,action):
         """
@@ -144,23 +147,28 @@ class BRCEnv(gym.Env):
 
     def step(self, action):
         car_acc = self.vehicle_limit(action)
-        state = self.State_update(car_acc) #state 是不经过action的 self.state
-        reward = self.reward_cal(action,state)
+        state = self.State_update(car_acc)  # 更新状态
+        reward = self.reward_cal(action, state)
         is_done = self.is_Done(state)
-        
+
+        # 更新当前状态、奖励和终止标志
         self.state, self.reward, self.terminated = state, reward, is_done
-
         self.state_Q.update(self.state)
-        
-        # 判断是否截断（根据需要设置）
-        self.truncated = False
 
-        
-        self.x.append( self.pedmodel.car_state[-1][0])  # 车辆位置
-        self.y.append( self.pedmodel.ped_state[-1][0]) # 行人位置
+        # 将状态转换为 float32 类型
+        obs = self.state_Q.state.astype(np.float32)
 
-        # return self.state, self.reward, self.terminated, self.truncated,{}
-        return self.state_Q.state, self.reward, self.terminated, self.truncated, {}
+        # 确保状态在 observation_space 内
+        assert self.observation_space.contains(obs), f"状态 {obs} 不在定义的状态空间内"
+
+        # 确保奖励是 float 类型
+        reward = float(reward)
+
+        # 记录车辆和行人位置
+        self.x.append(self.pedmodel.car_state[-1][0])  # 车辆位置
+        self.y.append(self.pedmodel.ped_state[-1][0])  # 行人位置
+
+        return obs, reward, self.terminated, self.truncated, {}
 
     def render(self, mode='human'):
         if mode == 'human':
@@ -201,7 +209,7 @@ class BRCEnv(gym.Env):
     def state_rand(self):
         # self.state
         # index = random.sample(range(0, len(self.init_array) ),1)
-        index = [200]
+        index = [124]
         state = self.init_array[index,:]
         init_state = {
             'car': state[0,0:3],
