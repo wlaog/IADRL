@@ -73,26 +73,43 @@ class BRCEnv(gym.Env):
 
 
     def reset(self, seed=None, options=None):
+        """
+            更新的逻辑是行人初始条件遍历，重置Para
+        """
         super().reset(seed=seed)
-
         # 重置状态、奖励和终止标志
-        # 按照无偏的逻辑加载参数组合Parameters--------------------
+        # 初始化状态
+        self.num = 0
+        self.reward = 0.0 
+        self.terminated = False
+        self.truncated = False
+
+        # 初始化行人Para
         file_path = 'env\\Parameters_Generator\\para_all.csv'
         data = pd.read_csv(file_path)
-        # 将 DataFrame 转换为 NumPy 数组
         data_array = myData(data.to_numpy())
-        # 初始化生成器
         generator = GMMGenerator(n_components=12, covariance_type='diag')
         generator.fit(data_array.data_scaled)
         generated_samples_scaled = generator.generate_samples()
         self.Para = data_array.scaler.inverse_transform(generated_samples_scaled)
         self.Para = self.Para.flatten().tolist()
 
+        # 更新case（初始状态)
+        obs = self.case_up()
+
+
+        return obs, {}
+
+    def case_up(self):
+        """
+            用于遍历case，下一个case
+        """
+
         # 初始化状态
         self.init_state = self.state_rand()
         self.pedmodel = DriverPedestrianModel(self.Para, self.init_state, self.dt, self.pdecrdt)
         self.state = np.concatenate((self.pedmodel.car_state[-2], self.pedmodel.ped_state[-2]))
-        self.reward = 0.0
+        # self.reward = 0.0 除了reward其他的全都重置
         self.terminated = False
         self.truncated = False
 
@@ -100,6 +117,7 @@ class BRCEnv(gym.Env):
         self.reward0 = self.belief_cal(self.state)
 
         # 记录车辆和行人位置
+        # TODO 要记录到num维度下
         self.x = [self.pedmodel.car_state[-1][0]]  # 初始车辆位置
         self.y = [self.pedmodel.ped_state[-1][0]]  # 初始行人位置
 
@@ -111,9 +129,9 @@ class BRCEnv(gym.Env):
         obs = self.state_Q.state.astype(np.float32)
 
         # 确保状态在 observation_space 内
-        assert self.observation_space.contains(obs), f"状态 {obs} 不在定义的状态空间内"
+        assert self.observation_space.contains(obs), f"状态 {obs} 不在定义的状态空间内"        
 
-        return obs, {}
+        return obs
 
     def vehicle_limit(self,action):
         """
@@ -149,8 +167,8 @@ class BRCEnv(gym.Env):
         car_acc = self.vehicle_limit(action)
         state = self.State_update(car_acc)  # 更新状态
         reward = self.reward_cal(action, state)
-        is_done = self.is_Done(state)
-
+        case_done, is_done = self.is_Done(state)
+        
         # 更新当前状态、奖励和终止标志
         self.state, self.reward, self.terminated = state, reward, is_done
         self.state_Q.update(self.state)
@@ -164,11 +182,16 @@ class BRCEnv(gym.Env):
         # 确保奖励是 float 类型
         reward = float(reward)
 
-        # 记录车辆和行人位置
-        self.x.append(self.pedmodel.car_state[-1][0])  # 车辆位置
-        self.y.append(self.pedmodel.ped_state[-1][0])  # 行人位置
+        # # 记录车辆和行人位置
+        # self.x.append(self.pedmodel.car_state[-1][0])  # 车辆位置
+        # self.y.append(self.pedmodel.ped_state[-1][0])  # 行人位置
+        
+        # 更新初始状态
+        if case_done:
+            self.num+=1
+            self.case_up()
 
-        return obs, reward, self.terminated, self.truncated, {}
+        return obs, reward, is_done, self.truncated, {}
 
     def render(self, mode='human'):
         if mode == 'human':
@@ -207,9 +230,8 @@ class BRCEnv(gym.Env):
             
     
     def state_rand(self):
-        # self.state
         # index = random.sample(range(0, len(self.init_array) ),1)
-        index = [124]
+        index = [self.num]
         state = self.init_array[index,:]
         init_state = {
             'car': state[0,0:3],
@@ -260,10 +282,16 @@ class BRCEnv(gym.Env):
     def is_Done(self,state):
         thound = 0.1
         if state[0] <thound or state[3] <thound or self.belief_cal(state) >= 0.95:
+            case_done = True
+        else:
+            case_done = False
+
+        if case_done == True and self.num == 290: 
             is_done = True
         else:
-            is_done = False
-        return is_done
+            is_done =False
+
+        return case_done, is_done
 
     def close(self):
         pass

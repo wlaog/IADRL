@@ -16,7 +16,7 @@ if __name__ == "__main__":
     # 训练参数：
     # np.seterr(over='warn')  # 或 over='raise' 以抛出异常
 
-    num_episodes=150
+    num_episodes=10000
     max_steps=1000
     render=False
     env = gym.make("BRC-v0")
@@ -24,8 +24,8 @@ if __name__ == "__main__":
     start_time = time.time() 
     state_dim = env.observation_space.shape[0]
     action_dim = env.action_space.shape[0]
-    # agent = SACAgent(state_dim, action_dim)
-    agent = DDPGAgent(state_dim, action_dim)
+    agent = SACAgent(state_dim, action_dim)
+    # agent = DDPGAgent(state_dim, action_dim)
 
 
     rewards = []
@@ -39,7 +39,7 @@ if __name__ == "__main__":
 
             action = agent.select_action(state)
             next_state, reward, done, truncated,_ = env.step(action)
-            if episode_reward >=40:
+            if episode_reward >=800:
                 envdam = 1
                 break
             agent.store_transition(state, action, reward, next_state, done)
